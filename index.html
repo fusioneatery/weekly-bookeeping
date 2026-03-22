@@ -480,7 +480,7 @@ function renderSummary(dates) {
   document.getElementById('sumCash').textContent=fmtMoney(cash);
   document.getElementById('sumUber').textContent=fmtMoney(uber);
   document.getElementById('sumDoor').textContent=fmtMoney(door);
-  const gst = Math.round(card * 0.1) + 500;
+  const gst = Math.round((card + uber + door) * 0.15);
   document.getElementById('sumGST').textContent=fmtMoney(gst);
 }
 
@@ -1168,7 +1168,7 @@ function exportCSV(scope) {
     const cash = incRows.filter(r=>r.pay==='cash').reduce((s,r)=>s+r.amount,0);
     const uber = incRows.filter(r=>r.pay==='uber').reduce((s,r)=>s+r.amount,0);
     const door = incRows.filter(r=>r.pay==='door').reduce((s,r)=>s+r.amount,0);
-    const gst  = Math.round(card * 0.1) + 500;
+    const gst  = Math.round((card + uber + door) * 0.15);
     const turnover = (card + uber + door) * 1.05 / 1.1;
     const foodCost = rows.filter(r=>r.type==='expense' && r.cat==='食材').reduce((s,r)=>s+r.amount,0);
     const foodRatio = turnover > 0 ? (foodCost / turnover * 100).toFixed(1) : 'N/A';
@@ -1256,7 +1256,7 @@ function exportExcel() {
     const cash = rows.filter(r=>r.pay==='cash').reduce((s,r)=>s+r.amount,0);
     const uber = rows.filter(r=>r.pay==='uber').reduce((s,r)=>s+r.amount,0);
     const door = rows.filter(r=>r.pay==='door').reduce((s,r)=>s+r.amount,0);
-    const gst  = Math.round(card * 0.1) + 500;
+    const gst  = Math.round((card + uber + door) * 0.15);
 
     wsData.push([]);
     wsData.push(['── 小計 ──']);
@@ -1290,7 +1290,7 @@ function exportExcel() {
     const inc  = rows.filter(r=>r.type==='income').reduce((s,r)=>s+r.amount,0);
     const exp  = rows.filter(r=>r.type==='expense').reduce((s,r)=>s+r.amount,0);
     const card = rows.filter(r=>r.pay==='card').reduce((s,r)=>s+r.amount,0);
-    const gst  = Math.round(card * 0.1) + 500;
+    const gst  = Math.round((card + uber + door) * 0.15);
     summaryData.push([
       `${fmtShort(mon)}-${fmtShort(sun)}`,
       inc, exp, inc-exp, card, gst
