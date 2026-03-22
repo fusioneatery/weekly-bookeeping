@@ -1,0 +1,1312 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>公司週帳</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --bg: #0f0f13; --surface: #1a1a22; --card: #22222e; --border: #2e2e40;
+    --accent: #4fffb0; --accent3: #ffd166; --text: #e8e8f0; --muted: #6b6b88;
+    --income: #4fffb0; --expense: #ff6b6b;
+    --card-clr: #64a0ff; --cash-clr: #ffd166; --uber-clr: #b0b0ff; --door-clr: #ff9070;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html { overflow-x: hidden; }
+  body { font-family: 'Noto Sans TC', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; width: 100vw; overflow-x: hidden; }
+
+  header { padding: 8px 10px; background: var(--surface); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100; width: 100%; }
+  .header-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .header-btns { display: flex; gap: 5px; }
+  .week-nav { display: flex; align-items: center; gap: 4px; }
+  .week-nav button { background: var(--card); border: 1px solid var(--border); color: var(--text); width: 26px; height: 26px; border-radius: 7px; font-size: 15px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .week-label { font-size: 10px; color: var(--muted); font-family: 'DM Mono', monospace; white-space: nowrap; max-width: 130px; overflow: hidden; text-overflow: ellipsis; }
+
+  .summary-bar { display: grid; grid-template-columns: repeat(4,1fr); gap: 4px; margin-bottom: 0; }
+  .sum-item { background: var(--card); border-radius: 7px; padding: 5px 3px; text-align: center; }
+  .sum-label { font-size: 8px; color: var(--muted); margin-bottom: 1px; white-space: nowrap; }
+  .sum-val { font-family: 'DM Mono', monospace; font-size: 10px; font-weight: 600; }
+  .sum-val.income { color: var(--income); }
+  .sum-val.expense { color: var(--expense); }
+  .sum-val.balance { color: var(--accent3); }
+  .sum-val.gst { color: #c77dff; }
+
+  .export-btn { background: var(--card); border: 1.5px solid var(--border); color: var(--muted); padding: 4px 8px; border-radius: 7px; font-size: 11px; font-family: 'Noto Sans TC', sans-serif; cursor: pointer; display: flex; align-items: center; gap: 3px; white-space: nowrap; }
+
+  .income-breakdown { display: grid; grid-template-columns: repeat(4,1fr); gap: 5px; }
+  .inc-chip { background: var(--card); border-radius: 7px; padding: 5px 4px; text-align: center; border-top: 2px solid transparent; }
+  .inc-chip.c-card { border-color: var(--card-clr); }
+  .inc-chip.c-cash { border-color: var(--cash-clr); }
+  .inc-chip.c-uber { border-color: var(--uber-clr); }
+  .inc-chip.c-door { border-color: var(--door-clr); }
+  .inc-chip-label { font-size: 9px; color: var(--muted); margin-bottom: 1px; }
+  .inc-chip-val { font-family: 'DM Mono', monospace; font-size: 10px; font-weight: 600; }
+  .inc-chip.c-card .inc-chip-val { color: var(--card-clr); }
+  .inc-chip.c-cash .inc-chip-val { color: var(--cash-clr); }
+  .inc-chip.c-uber .inc-chip-val { color: var(--uber-clr); }
+  .inc-chip.c-door .inc-chip-val { color: var(--door-clr); }
+
+  .days-scroll { display: grid; grid-template-columns: repeat(7,1fr); padding: 8px 8px 4px; gap: 4px; }
+  .day-tab { background: var(--card); border: 1.5px solid var(--border); border-radius: 8px; padding: 5px 1px; text-align: center; cursor: pointer; transition: all .15s; min-width: 0; }
+  .day-tab.active { border-color: var(--accent); background: rgba(79,255,176,.08); }
+  .day-tab.today .day-name { color: var(--accent3); }
+  .day-name { font-size: 9px; color: var(--muted); margin-bottom: 1px; }
+  .day-date { font-size: 15px; font-weight: 700; font-family: 'DM Mono', monospace; }
+  .day-dot { display: flex; justify-content: center; gap: 2px; margin-top: 3px; min-height: 5px; }
+  .dot { width: 4px; height: 4px; border-radius: 50%; }
+  .dot.i { background: var(--income); }
+  .dot.e { background: var(--expense); }
+
+  .entries-area { padding: 12px 12px 100px; }
+  .day-title { font-size: 13px; font-weight: 700; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+  .day-total { font-family: 'DM Mono', monospace; font-size: 13px; }
+  .entry-list { display: flex; flex-direction: column; gap: 8px; }
+  .entry-card { background: var(--card); border-radius: 10px; padding: 11px 12px; display: flex; align-items: center; gap: 10px; border-left: 3px solid transparent; animation: fadeIn .2s ease; }
+  .entry-card.income { border-color: var(--income); }
+  .entry-card.expense { border-color: var(--expense); }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:none} }
+  .entry-icon { width: 34px; height: 34px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 17px; flex-shrink: 0; }
+  .entry-icon.income { background: rgba(79,255,176,.12); }
+  .entry-icon.expense { background: rgba(255,107,107,.12); }
+  .entry-info { flex: 1; min-width: 0; }
+  .entry-desc { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .entry-meta { font-size: 10px; color: var(--muted); margin-top: 3px; display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+  .pay-badge { display: inline-block; font-size: 9px; padding: 1px 7px; border-radius: 20px; font-weight: 600; }
+  .pay-badge.card { background: rgba(100,160,255,.15); color: var(--card-clr); }
+  .pay-badge.cash { background: rgba(255,209,102,.15); color: var(--cash-clr); }
+  .pay-badge.uber { background: rgba(176,176,255,.15); color: var(--uber-clr); }
+  .pay-badge.door { background: rgba(255,144,112,.15); color: var(--door-clr); }
+  .entry-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
+  .entry-amount { font-family: 'DM Mono', monospace; font-size: 14px; font-weight: 600; }
+  .entry-amount.income { color: var(--income); }
+  .entry-amount.expense { color: var(--expense); }
+  .entry-del { background: none; border: none; color: var(--muted); font-size: 14px; cursor: pointer; padding: 2px; }
+  .empty-state { text-align: center; color: var(--muted); padding: 40px 0; font-size: 14px; }
+  .empty-state .icon { font-size: 36px; margin-bottom: 8px; }
+
+  .fab { position: fixed; bottom: 28px; right: 20px; width: 56px; height: 56px; border-radius: 16px; background: var(--accent); color: #000; border: none; font-size: 28px; font-weight: 700; cursor: pointer; box-shadow: 0 4px 20px rgba(79,255,176,.4); display: flex; align-items: center; justify-content: center; transition: transform .1s; z-index: 99; }
+  .fab:active { transform: scale(.93); }
+
+  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.75); z-index: 200; display: flex; align-items: flex-end; opacity: 0; pointer-events: none; transition: opacity .2s; }
+  .overlay.show { opacity: 1; pointer-events: all; }
+  .modal { background: var(--surface); width: 100%; border-radius: 20px 20px 0 0; padding: 16px 16px 36px; transform: translateY(100%); transition: transform .25s cubic-bezier(.4,0,.2,1); max-height: 92vh; overflow-y: auto; }
+  .overlay.show .modal { transform: translateY(0); }
+  .modal-handle { width: 36px; height: 4px; background: var(--border); border-radius: 2px; margin: 0 auto 14px; }
+  .modal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+  .modal-head h2 { font-size: 15px; }
+  .modal-close { background: var(--card); border: 1.5px solid var(--border); color: var(--muted); width: 30px; height: 30px; border-radius: 8px; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  .type-toggle { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+  .type-btn { padding: 9px; border-radius: 10px; border: 1.5px solid var(--border); background: var(--card); color: var(--muted); font-size: 13px; font-family: 'Noto Sans TC', sans-serif; cursor: pointer; transition: all .15s; }
+  .type-btn.active.income { border-color: var(--income); color: var(--income); background: rgba(79,255,176,.08); }
+  .type-btn.active.expense { border-color: var(--expense); color: var(--expense); background: rgba(255,107,107,.08); }
+  .form-group { margin-bottom: 12px; }
+  .form-group label { font-size: 11px; color: var(--muted); display: block; margin-bottom: 5px; }
+  .form-group input, .form-group select { width: 100%; background: var(--card); border: 1.5px solid var(--border); color: var(--text); border-radius: 10px; padding: 11px 13px; font-size: 15px; font-family: 'Noto Sans TC', sans-serif; outline: none; }
+  .form-group input:focus { border-color: var(--accent); }
+  .amount-wrap { position: relative; }
+  .amount-wrap span { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 15px; }
+  .amount-wrap input { padding-left: 28px; }
+  .pay-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+  .pay-btn { padding: 10px 8px; border-radius: 10px; border: 1.5px solid var(--border); background: var(--card); color: var(--muted); font-size: 13px; font-family: 'Noto Sans TC', sans-serif; cursor: pointer; transition: all .15s; display: flex; align-items: center; justify-content: center; gap: 5px; }
+  .pay-btn.active.p-card { border-color: var(--card-clr); color: var(--card-clr); background: rgba(100,160,255,.1); }
+  .pay-btn.active.p-cash { border-color: var(--cash-clr); color: var(--cash-clr); background: rgba(255,209,102,.1); }
+  .pay-btn.active.p-uber { border-color: var(--uber-clr); color: var(--uber-clr); background: rgba(176,176,255,.1); }
+  .pay-btn.active.p-door { border-color: var(--door-clr); color: var(--door-clr); background: rgba(255,144,112,.1); }
+  .pay-group { margin-bottom: 12px; }
+  .pay-group.hidden { display: none; }
+  .cats { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; }
+  .cat-btn { padding: 6px 12px; border-radius: 20px; border: 1.5px solid var(--border); background: var(--card); color: var(--muted); font-size: 12px; cursor: pointer; font-family: 'Noto Sans TC', sans-serif; transition: all .15s; white-space: nowrap; }
+  .cat-btn.active { border-color: var(--accent3); color: var(--accent3); }
+  .submit-btn { width: 100%; padding: 13px; border-radius: 12px; border: none; background: var(--accent); color: #000; font-size: 15px; font-weight: 700; font-family: 'Noto Sans TC', sans-serif; cursor: pointer; margin-top: 6px; transition: opacity .15s; }
+  .submit-btn:active { opacity: .8; }
+  .submit-3-wrap { display: flex; gap: 8px; margin-top: 6px; }
+  .submit-3 { flex: 1; padding: 10px 4px; border-radius: 12px; border: none; font-size: 13px; font-weight: 700; font-family: 'Noto Sans TC', sans-serif; cursor: pointer; line-height: 1.5; transition: opacity .15s; }
+  .submit-3:active { opacity: .75; }
+  .s3-cash     { background: #4fffb0; color: #000; }
+  .s3-card     { background: #4f8ef7; color: #fff; }
+  .s3-transfer { background: #f7c94f; color: #000; }
+  .s3-uber     { background: #818cf8; color: #fff; }
+  .s3-gift     { background: #f472b6; color: #fff; }
+  /* Export */
+  .export-btn:hover, .export-btn:active { border-color: var(--accent3); color: var(--accent3); }
+  /* Export modal */
+  .exp-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.75); z-index: 300; display: flex; align-items: center; justify-content: center; padding: 24px; opacity: 0; pointer-events: none; transition: opacity .2s; }
+  .exp-overlay.show { opacity: 1; pointer-events: all; }
+  .exp-modal { background: var(--surface); border-radius: 16px; padding: 22px 20px; width: 100%; max-width: 340px; border: 1px solid var(--border); }
+  .exp-modal h3 { font-size: 15px; margin-bottom: 14px; }
+  .exp-options { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+  .exp-opt { padding: 12px 14px; border-radius: 10px; border: 1.5px solid var(--border); background: var(--card); color: var(--text); font-size: 13px; font-family: 'Noto Sans TC', sans-serif; cursor: pointer; text-align: left; transition: all .15s; }
+  .exp-opt:hover, .exp-opt:active { border-color: var(--accent); color: var(--accent); }
+  .exp-cancel { width: 100%; padding: 10px; border-radius: 10px; border: 1.5px solid var(--border); background: transparent; color: var(--muted); font-size: 13px; font-family: 'Noto Sans TC', sans-serif; cursor: pointer; }
+  /* Subcategory modal */
+  .sub-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.8); z-index: 400; display: flex; align-items: flex-end; justify-content: center; opacity: 0; pointer-events: none; transition: opacity .2s; }
+  .sub-overlay.show { opacity: 1; pointer-events: all; }
+  .sub-modal { background: var(--surface); width: 100vw; max-width: 100vw; border-radius: 20px 20px 0 0; padding: 16px 16px 36px; transform: translateY(100%); transition: transform .25s cubic-bezier(.4,0,.2,1); overflow-y: auto; max-height: 85vh; }
+  .sub-overlay.show .sub-modal { transform: translateY(0); }
+  .sub-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+  .sub-head h3 { font-size: 15px; }
+  .sub-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; }
+  .sub-btn { padding: 12px 6px; border-radius: 10px; border: 1.5px solid var(--border); background: var(--card); color: var(--text); font-size: 13px; font-family: 'Noto Sans TC', sans-serif; cursor: pointer; text-align: center; transition: all .15s; }
+  .sub-btn:active { border-color: var(--expense); color: var(--expense); background: rgba(255,107,107,.1); }
+  @keyframes shake {
+    0%,100% { transform: rotate(0deg); }
+    25% { transform: rotate(-2deg); }
+    75% { transform: rotate(2deg); }
+  }
+  /* Staff modal extras */
+  .staff-list { display: flex; flex-direction: column; gap: 7px; margin-bottom: 14px; }
+  .staff-row { display: flex; align-items: center; gap: 10px; border: 1.5px solid transparent; border-radius: 10px; padding: 10px 12px; cursor: pointer; transition: all .15s; }
+  .staff-row:active { opacity: .75; transform: scale(.98); }
+  .staff-avatar { width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; color: #fff; flex-shrink: 0; letter-spacing: .5px; }
+  .staff-name { flex: 1; font-size: 14px; }
+  .staff-del-btn { background: none; border: none; color: var(--muted); font-size: 16px; padding: 4px 6px; cursor: pointer; border-radius: 6px; line-height: 1; }
+  .staff-del-btn:active { background: rgba(255,107,107,.15); color: var(--expense); }
+  .staff-add-row { display: flex; gap: 8px; }
+  .staff-add-input { flex: 1; background: var(--card); border: 1.5px solid var(--border); color: var(--text); border-radius: 10px; padding: 10px 12px; font-size: 14px; font-family: 'Noto Sans TC', sans-serif; outline: none; }
+  .staff-add-input:focus { border-color: var(--accent); }
+  .staff-add-btn { background: var(--accent); color: #000; border: none; border-radius: 10px; padding: 10px 16px; font-size: 14px; font-weight: 700; cursor: pointer; font-family: 'Noto Sans TC', sans-serif; white-space: nowrap; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-top">
+    <div class="header-btns">
+      <button class="export-btn" onclick="openBackup()">☁️ 備份</button>
+      <button class="export-btn" onclick="openExport()">📥 匯出</button>
+    </div>
+    <div class="week-nav">
+      <button onclick="changeWeek(-1)">‹</button>
+      <span class="week-label" id="weekLabel"></span>
+      <button onclick="changeWeek(1)">›</button>
+    </div>
+  </div>
+  <div class="summary-bar">
+    <div class="sum-item"><div class="sum-label">本週收入</div><div class="sum-val income" id="sumIncome">$0</div></div>
+    <div class="sum-item"><div class="sum-label">本週支出</div><div class="sum-val expense" id="sumExpense">$0</div></div>
+    <div class="sum-item"><div class="sum-label">淨利</div><div class="sum-val balance" id="sumBalance">$0</div></div>
+    <div class="sum-item" style="border-top:2px solid #c77dff;"><div class="sum-label">預計 GST</div><div class="sum-val gst" id="sumGST">$0</div></div>
+  </div>
+  <!-- hidden elements to keep JS references working -->
+  <span id="sumCard" style="display:none"></span>
+  <span id="sumCash" style="display:none"></span>
+  <span id="sumUber" style="display:none"></span>
+  <span id="sumDoor" style="display:none"></span>
+</header>
+
+<div class="days-scroll" id="daysScroll"></div>
+<div class="entries-area" id="entriesArea"></div>
+
+<button class="fab" onclick="openModal()">+</button>
+
+<div class="overlay" id="overlay" onclick="closeModalOutside(event)">
+  <div class="modal" id="modalBox">
+    <div class="modal-handle"></div>
+    <div class="modal-head">
+      <h2>新增記帳</h2>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="type-toggle">
+      <button class="type-btn active expense" id="btnExpense" onclick="setType('expense')">－ 支出</button>
+      <button class="type-btn income" id="btnIncome" onclick="setType('income')">＋ 收入</button>
+    </div>
+    <div class="form-group pay-group" id="payGroup" style="display:none!important"></div>
+    <div class="form-group cat-group" id="catGroup">
+      <label>類別</label>
+      <div class="cats" id="catBtns"></div>
+    </div>
+    <div class="form-group">
+      <label>金額</label>
+      <div class="amount-wrap"><span>$</span><input type="number" id="fAmount" placeholder="0" inputmode="decimal" enterkeyhint="next" onkeydown="if(event.key==='Enter'||event.keyCode===13){event.preventDefault();event.stopPropagation();setTimeout(()=>document.getElementById('fDesc').focus(),50);return false;}"></div>
+    </div>
+    <div class="form-group" id="cashPaidGroup" style="display:none;">
+      <div style="padding:8px 12px;border-radius:10px;border:1.5px solid #4fffb0;background:rgba(79,255,176,0.08);color:#4fffb0;font-size:0.85rem;text-align:center;">
+        ✅ 已從現金付出（不計入支出）
+      </div>
+    </div>
+    <!-- 支出：4個按鈕 -->
+    <div class="submit-3-wrap" id="submit3wrap">
+      <button class="submit-3 s3-cash" onclick="addEntry('cash')">💵<br>現金</button>
+      <button class="submit-3 s3-card" onclick="addEntry('card')">💳<br>刷卡</button>
+      <button class="submit-3 s3-transfer" onclick="addEntry('transfer')">🏦<br>轉帳</button>
+      <button class="submit-3 s3-gift" onclick="addEntry('gift')">🎁<br>Gift</button>
+    </div>
+    <!-- 收入：4個按鈕 -->
+    <div class="submit-3-wrap" id="submit4wrap" style="display:none;">
+      <button class="submit-3 s3-card" onclick="addEntry('card')">💳<br>刷卡</button>
+      <button class="submit-3 s3-cash" onclick="addEntry('cash')">💵<br>現金</button>
+      <button class="submit-3 s3-uber" onclick="addEntry('uber')">🚗<br>Uber</button>
+      <button class="submit-3 s3-door" onclick="addEntry('door')">🛵<br>Door</button>
+    </div>
+    <div class="form-group" style="margin-top:10px;">
+      <label>說明（選填）</label>
+      <input type="text" id="fDesc" placeholder="例：客戶付款、餐費…" enterkeyhint="done" onkeydown="if(event.key==='Enter'){this.blur();}">
+    </div>
+    <div class="form-group">
+      <label>日期</label>
+      <input type="date" id="fDate" tabindex="-1">
+    </div>
+  </div>
+</div>
+
+<!-- Subcategory Modal (食材) -->
+<div class="sub-overlay" id="subOverlay" onclick="closeSubOutside(event)">
+  <div class="sub-modal">
+    <div class="modal-handle"></div>
+    <div class="sub-head">
+      <h3>🥬 食材 — 選擇供應商</h3>
+      <button class="modal-close" onclick="closeSub()">✕</button>
+    </div>
+    <div class="staff-list" id="subList"></div>
+    <div class="staff-add-row">
+      <input class="staff-add-input" id="subInput" placeholder="新增供應商名稱…" maxlength="30" onkeydown="if(event.key==='Enter')addSupplier()">
+      <button class="staff-add-btn" onclick="addSupplier()">＋</button>
+    </div>
+  </div>
+</div>
+
+<!-- Subcategory Modal (員工) -->
+<div class="sub-overlay" id="staffOverlay" onclick="closeStaffOutside(event)">
+  <div class="sub-modal">
+    <div class="modal-handle"></div>
+    <div class="sub-head">
+      <h3>👨‍💼 員工 — 選擇人員</h3>
+      <button class="modal-close" onclick="closeStaff()">✕</button>
+    </div>
+    <div class="staff-list" id="staffList"></div>
+    <div class="staff-add-row">
+      <input type="color" id="staffColor" value="#4fffb0" style="width:40px;height:40px;border:none;border-radius:8px;cursor:pointer;padding:2px;background:var(--card);flex-shrink:0;">
+      <input class="staff-add-input" id="staffInput" placeholder="新增員工姓名…" maxlength="20" onkeydown="if(event.key==='Enter')addStaff()">
+      <button class="staff-add-btn" onclick="addStaff()">＋</button>
+    </div>
+  </div>
+</div>
+
+<!-- Subcategory Modal (帳單) -->
+<div class="sub-overlay" id="billOverlay" onclick="closeBillOutside(event)">
+  <div class="sub-modal">
+    <div class="modal-handle"></div>
+    <div class="sub-head">
+      <h3>📄 帳單 — 選擇項目</h3>
+      <button class="modal-close" onclick="closeBill()">✕</button>
+    </div>
+    <div class="staff-list" id="billList"></div>
+    <div class="staff-add-row">
+      <input class="staff-add-input" id="billInput" placeholder="新增帳單項目…" maxlength="30" onkeydown="if(event.key==='Enter')addBill()">
+      <button class="staff-add-btn" onclick="addBill()">＋</button>
+    </div>
+  </div>
+</div>
+
+<!-- Third-level Modal (Woolworths) -->
+<div class="sub-overlay" id="woolOverlay" onclick="if(event.target===this)closeWool()">
+  <div class="sub-modal">
+    <div class="modal-handle"></div>
+    <div class="sub-head">
+      <h3>🛒 Woolworths — 選擇項目</h3>
+      <button class="modal-close" onclick="closeWool()">✕</button>
+    </div>
+    <div class="staff-list" id="woolList"></div>
+    <div class="staff-add-row">
+      <input class="staff-add-input" id="woolInput" placeholder="新增項目…" maxlength="30" onkeydown="if(event.key==='Enter')addWool()">
+      <button class="staff-add-btn" onclick="addWool()">＋</button>
+    </div>
+  </div>
+</div>
+
+<!-- Backup / Restore Modal -->
+<div class="exp-overlay" id="backupOverlay" onclick="if(event.target===this)closeBackup()">
+  <div class="exp-modal" style="max-width:360px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+      <h3>☁️ 備份與還原</h3>
+      <button onclick="closeBackup()" style="background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;">✕</button>
+    </div>
+    <p style="font-size:11px;color:var(--muted);margin-bottom:14px;" id="backupLastTime">上次備份：從未</p>
+    <div class="exp-options">
+      <button class="exp-opt" onclick="doBackup()" style="border-color:#4fffb0;">
+        ☁️ 立即備份<br>
+        <small style="color:var(--muted);font-size:11px;">彈出分享選單，選擇 Gmail / Google Drive 等</small>
+      </button>
+      <button class="exp-opt" onclick="document.getElementById('restoreInput').click()">
+        📂 還原備份<br>
+        <small style="color:var(--muted);font-size:11px;">選擇之前的備份 JSON 檔案</small>
+      </button>
+    </div>
+    <div id="restorePreview" style="display:none;background:var(--card);border-radius:10px;padding:12px;margin-bottom:12px;font-size:12px;"></div>
+    <button class="exp-cancel" onclick="closeBackup()">關閉</button>
+  </div>
+</div>
+<input type="file" id="restoreInput" accept=".json" style="display:none" onchange="loadRestoreFile(event)">
+
+<!-- Export Modal -->
+<div class="exp-overlay" id="expOverlay" onclick="closeExportOutside(event)">
+  <div class="exp-modal">
+    <h3>📥 匯出</h3>
+    <div class="exp-options">
+      <button class="exp-opt" onclick="exportCSV('week')">📅 本週 CSV<br><small style="color:var(--muted);font-size:11px;" id="expWeekRange"></small></button>
+      <button class="exp-opt" onclick="exportCSV('all')">🗂 全部 CSV<br><small style="color:var(--muted);font-size:11px;" id="expAllCount"></small></button>
+      <button class="exp-opt" onclick="exportExcel()" style="border-color:#4fffb0;">
+        📊 全部匯出 Excel（每週一個 Sheet）<br>
+        <small style="color:var(--muted);font-size:11px;">自動按週分頁，含小計</small>
+      </button>
+    </div>
+    <button class="exp-cancel" onclick="closeExport()">取消</button>
+  </div>
+</div>
+
+<script>
+const INCOME_CATS  = ['銷售收入','其他收入'];
+const EXPENSE_CATS = ['食材','員工','帳單','雜支','租金','會計'];
+const CAT_EMOJI = {
+  '銷售收入':'💰','服務費':'🤝','退款':'↩️','其他收入':'📥',
+  '食材':'🥬','員工':'👨‍💼','帳單':'📄','雜支':'🗂','租金':'🏢','會計':'🧾'
+};
+const PAY_LABEL = { card:'刷卡', cash:'現金', uber:'Uber', door:'DoorDash' };
+const PAY_EMOJI = { card:'💳', cash:'💵', uber:'🚗', door:'🛵' };
+
+// Subcategories for 食材 (persisted)
+const DEFAULT_FOOD_SUBS = ['Woolworths','Veggie','Buns','ARZ','Yotis',"Snowy's",'Costco','Coles','Aldi','Amazon','Potato','Steaks','Others'];
+const FOOD_EMOJI = { Woolworths:'🛒', Veggie:'🥦', Buns:'🍞', ARZ:'🏪', Yotis:'🏬', "Snowy's":'❄️', Costco:'🏭', Coles:'🛍', Aldi:'🏷', Amazon:'📦', Potato:'🥔', Steaks:'🥩', Others:'📌' };
+let foodSubs = JSON.parse(localStorage.getItem('foodSubs') || 'null') || [...DEFAULT_FOOD_SUBS];
+function saveFoodSubs() { localStorage.setItem('foodSubs', JSON.stringify(foodSubs)); }
+
+// Third-level: Woolworths items
+const DEFAULT_WOOL_SUBS = ['Helen','S390','Protaco','Fishy'];
+const WOOL_EMOJI = { Helen:'👩', S390:'🏷', Protaco:'🐄', Fishy:'🐟' };
+let woolSubs = JSON.parse(localStorage.getItem('woolSubs') || 'null') || [...DEFAULT_WOOL_SUBS];
+function saveWoolSubs() { localStorage.setItem('woolSubs', JSON.stringify(woolSubs)); }
+
+// Subcategories for 帳單 (persisted)
+const DEFAULT_BILL_SUBS = ['水','電','瓦斯','網路'];
+const BILL_EMOJI = { '水':'💧','電':'⚡','瓦斯':'🔥','網路':'🌐' };
+let billSubs = JSON.parse(localStorage.getItem('billSubs') || 'null') || [...DEFAULT_BILL_SUBS];
+function saveBillSubs() { localStorage.setItem('billSubs', JSON.stringify(billSubs)); }
+
+// Staff list (persisted in localStorage)
+const DEFAULT_STAFF = [
+  {name:'Sok',     color:'#ff6b6b'},
+  {name:'Michael', color:'#ffd166'},
+  {name:'Elisestar',color:'#4fffb0'},
+  {name:'William', color:'#64a0ff'},
+  {name:'Betty',   color:'#ff85c8'},
+  {name:'Zara',    color:'#b0b0ff'},
+  {name:'Dana',    color:'#ff9070'},
+  {name:'Eric',    color:'#70e0ff'},
+];
+let staffList = JSON.parse(localStorage.getItem('staffList') || 'null') || [...DEFAULT_STAFF];
+function saveStaff() { localStorage.setItem('staffList', JSON.stringify(staffList)); }
+
+let data = JSON.parse(localStorage.getItem('weeklyAcct') || '[]');
+let currentWeekOffset = 0;
+let selectedDay = null;
+let currentType = 'income';
+let selectedCat = null;
+let selectedPay = 'card';
+let cashPaid = false;
+let selectedSubCat = null;
+let selectedSubCat2 = null; // third level (e.g. Woolworths item)
+
+function fmt(d) { return d.toISOString().slice(0,10); }
+function fmtShort(d) {
+  return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`;
+}
+function fmtDDMMYYYY(d) {
+  const dd   = String(d.getDate()).padStart(2,'0');
+  const mm   = String(d.getMonth()+1).padStart(2,'0');
+  const yyyy = d.getFullYear();
+  return `${dd}/${mm}/${yyyy}`;
+}
+function fmtMoney(n) { return '$' + Math.abs(n).toLocaleString('zh-TW'); }
+
+function getWeekDates(offset=0) {
+  const now = new Date();
+  const mon = new Date(now);
+  mon.setDate(now.getDate() - ((now.getDay()+6)%7) + offset*7);
+  return Array.from({length:7},(_,i)=>{ const d=new Date(mon); d.setDate(mon.getDate()+i); return d; });
+}
+
+function renderWeek() {
+  const dates = getWeekDates(currentWeekOffset);
+  const first=dates[0], last=dates[6];
+  document.getElementById('weekLabel').textContent =
+    `${fmtShort(first)} – ${fmtShort(last)}`;
+  if(!selectedDay || !dates.find(d=>fmt(d)===selectedDay)) {
+    const today=fmt(new Date());
+    selectedDay = dates.find(d=>fmt(d)===today) ? today : fmt(dates[0]);
+  }
+  const scroll = document.getElementById('daysScroll');
+  const DAY=['週一','週二','週三','週四','週五','週六','週日'];
+  const today=fmt(new Date());
+  scroll.innerHTML = dates.map((d,i)=>{
+    const ds=fmt(d), de=data.filter(e=>e.date===ds);
+    return `<div class="day-tab ${ds===selectedDay?'active':''} ${ds===today?'today':''}" onclick="selectDay('${ds}')">
+      <div class="day-name">${DAY[i]}</div>
+      <div class="day-date">${d.getDate()}</div>
+      <div class="day-dot">
+        ${de.some(e=>e.type==='income')?'<span class="dot i"></span>':''}
+        ${de.some(e=>e.type==='expense')?'<span class="dot e"></span>':''}
+      </div></div>`;
+  }).join('');
+  setTimeout(()=>{
+    const a=scroll.querySelector('.day-tab.active');
+    if(a) a.scrollIntoView({block:'nearest',inline:'center',behavior:'smooth'});
+  },50);
+  renderSummary(dates);
+  renderEntries();
+}
+
+function renderSummary(dates) {
+  const ds=new Set(dates.map(fmt));
+  let inc=0,exp=0,card=0,cash=0,uber=0,door=0;
+  data.forEach(e=>{
+    if(!ds.has(e.date)) return;
+    if(e.type==='income'){
+      inc+=e.amount;
+      if(e.pay==='card') card+=e.amount;
+      else if(e.pay==='cash') cash+=e.amount;
+      else if(e.pay==='uber') uber+=e.amount;
+      else if(e.pay==='door') door+=e.amount;
+    } else if(!e.cashPaid) exp+=e.amount;
+  });
+  document.getElementById('sumIncome').textContent=fmtMoney(inc);
+  document.getElementById('sumExpense').textContent=fmtMoney(exp);
+  const bal=inc-exp;
+  const el=document.getElementById('sumBalance');
+  el.textContent=(bal>=0?'+':'-')+fmtMoney(Math.abs(bal));
+  el.style.color=bal>=0?'var(--accent3)':'var(--expense)';
+  document.getElementById('sumCard').textContent=fmtMoney(card);
+  document.getElementById('sumCash').textContent=fmtMoney(cash);
+  document.getElementById('sumUber').textContent=fmtMoney(uber);
+  document.getElementById('sumDoor').textContent=fmtMoney(door);
+  const gst = Math.round(card * 0.1) + 500;
+  document.getElementById('sumGST').textContent=fmtMoney(gst);
+}
+
+function renderEntries() {
+  const area=document.getElementById('entriesArea');
+  const de=data.filter(e=>e.date===selectedDay).slice().reverse();
+  const d=new Date(selectedDay+'T12:00:00');
+  const inc=de.filter(e=>e.type==='income').reduce((s,e)=>s+e.amount,0);
+  const exp=de.filter(e=>e.type==='expense' && !e.cashPaid).reduce((s,e)=>s+e.amount,0);
+  const bal=inc-exp;
+  let html=`<div class="day-title">
+    <span>${fmtDDMMYYYY(d)}</span>
+    <span class="day-total" style="color:${bal>=0?'var(--income)':'var(--expense)'}">
+      ${bal>=0?'+':'-'}${fmtMoney(Math.abs(bal))}</span>
+  </div><div class="entry-list">`;
+  if(!de.length) {
+    html+=`<div class="empty-state"><div class="icon">📝</div>今日尚無記帳<br>點 + 開始記錄</div>`;
+  } else {
+    de.forEach(e=>{
+      const emoji = e.type==='income' ? (PAY_EMOJI[e.pay]||'💰') : (CAT_EMOJI[e.cat]||'💸');
+      const staffObj = (e.cat==='員工' && e.subcat) ? staffList.find(s=>getStaffName(s)===e.subcat) : null;
+      const staffClr = staffObj ? getStaffColor(staffObj) : '#4fffb0';
+      const iconContent = (e.cat==='員工' && e.subcat)
+        ? `<div style="width:34px;height:34px;border-radius:50%;background:${staffClr};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#000;flex-shrink:0;">${staffInitials(e.subcat)}</div>`
+        : `<div class="entry-icon ${e.type}">${emoji}</div>`;
+      const metaCat = e.subcat ? `${e.cat} · ${e.subcat}${e.subcat2?' · '+e.subcat2:''}` : (e.cat||'');
+      const EXP_PAY_LABEL = { cash:'💵 現金', card:'💳 刷卡', transfer:'🏦 轉帳', gift:'🎁 Gift Card' };
+      const EXP_PAY_COLOR = { cash:'rgba(79,255,176,0.15);color:#4fffb0', card:'rgba(79,142,247,0.15);color:#4f8ef7', transfer:'rgba(247,201,79,0.15);color:#f7c94f', gift:'rgba(244,114,182,0.15);color:#f472b6' };
+      const badge = e.type==='income' && e.pay
+        ? `<span class="pay-badge ${e.pay}">${PAY_LABEL[e.pay]||e.pay}</span>`
+        : (e.type==='expense' && e.pay
+          ? `<span class="pay-badge" style="background:${EXP_PAY_COLOR[e.pay]||'rgba(150,150,150,0.15);color:#aaa'}">${EXP_PAY_LABEL[e.pay]||e.pay}${e.cashPaid?' · 不計支出':''}</span>`
+          : (e.cashPaid ? `<span class="pay-badge" style="background:rgba(79,255,176,0.15);color:#4fffb0;">💵 已付現金</span>` : ''));
+      html+=`<div class="entry-card ${e.type}" ${e.cashPaid?'style="opacity:0.7"':''}>
+        ${iconContent}
+        <div class="entry-info">
+          <div class="entry-desc">${e.desc||metaCat||'—'}</div>
+          <div class="entry-meta">${metaCat}${badge}</div>
+        </div>
+        <div class="entry-right">
+          <div class="entry-amount ${e.type}" ${e.cashPaid?'style="text-decoration:line-through;opacity:0.5"':''}>${e.type==='income'?'+':'-'}${fmtMoney(e.amount)}</div>
+          <button class="entry-del" data-delid="${e.id}" onclick="confirmDelete(${e.id})">✕</button>
+        </div>
+      </div>`;
+    });
+  }
+  html+='</div>';
+  area.innerHTML=html;
+}
+
+function selectDay(ds) { selectedDay=ds; renderWeek(); }
+function changeWeek(dir) { currentWeekOffset+=dir; selectedDay=null; renderWeek(); }
+
+function openModal() {
+  document.getElementById('fAmount').value='';
+  document.getElementById('fDesc').value='';
+  document.getElementById('fDate').value=selectedDay;
+  selectedCat=null; selectedSubCat=null; selectedSubCat2=null;
+  cashPaid=false;
+  document.getElementById('cashPaidGroup').style.display='none';
+  setType('expense');
+  document.getElementById('overlay').classList.add('show');
+  setTimeout(()=>document.getElementById('fAmount').focus(),300);
+}
+function closeModal() { document.getElementById('overlay').classList.remove('show'); }
+function closeModalOutside(e) { if(e.target===document.getElementById('overlay')) closeModal(); }
+
+// Swipe down to close
+(function(){
+  let startY=0;
+  window.addEventListener('load',()=>{
+    const m=document.getElementById('modalBox');
+    m.addEventListener('touchstart',e=>{ startY=e.touches[0].clientY; },{passive:true});
+    m.addEventListener('touchend',e=>{ if(e.changedTouches[0].clientY-startY>80) closeModal(); },{passive:true});
+  });
+})();
+
+function setType(type) {
+  currentType=type;
+  document.getElementById('btnIncome').className='type-btn'+(type==='income'?' active income':' income');
+  document.getElementById('btnExpense').className='type-btn'+(type==='expense'?' active expense':' expense');
+  document.getElementById('catGroup').classList.toggle('hidden',type!=='expense');
+  // Show correct submit buttons
+  document.getElementById('submit3wrap').style.display = type==='expense' ? 'flex' : 'none';
+  document.getElementById('submit4wrap').style.display = type==='income'  ? 'flex' : 'none';
+  selectedCat=null;
+  selectedSubCat=null;
+  selectedSubCat2=null;
+  if(type==='expense') renderCats();
+}
+
+function setPayMethod(pay) {
+  selectedPay=pay;
+  ['card','cash','uber','door'].forEach(p=>{
+    document.getElementById('pb-'+p).className='pay-btn p-'+p+(p===pay?' active':'');
+  });
+}
+
+function renderCats() {
+  const cats = EXPENSE_CATS;
+  if(!selectedCat) selectedCat=cats[0];
+  document.getElementById('catBtns').innerHTML=cats.map(c=>{
+    const isActive = selectedCat===c;
+    let subLabel = '';
+    if(isActive && selectedSubCat) {
+      subLabel = ` · ${selectedSubCat}`;
+      if(selectedSubCat2) subLabel += ` · ${selectedSubCat2}`;
+    }
+    const emoji = CAT_EMOJI[c]||'';
+    return `<button class="cat-btn ${isActive?'active':''}" onclick="selectCat('${c}')">${emoji} ${c}${subLabel}</button>`;
+  }).join('');
+}
+
+function selectCat(cat) {
+  selectedCat = cat;
+  selectedSubCat = null;
+  selectedSubCat2 = null;
+  cashPaid = false;
+  const cpGroup = document.getElementById('cashPaidGroup');
+  if(cat === '員工') {
+    cashPaid = true;
+    cpGroup.style.display = '';
+  } else {
+    cpGroup.style.display = 'none';
+  }
+  renderCats();
+  if(cat === '食材') openSub();
+  if(cat === '員工') openStaff();
+  if(cat === '帳單') openBill();
+}
+
+
+
+// ── Subcategory modal (食材) ──
+function openSub() {
+  renderSubList();
+  document.getElementById('subInput').value='';
+  document.getElementById('subOverlay').classList.add('show');
+  setTimeout(()=>document.getElementById('subInput').blur(),100);
+}
+function closeSub() { subEditMode = false; document.getElementById('subOverlay').classList.remove('show'); }
+function closeSubOutside(e) { if(e.target===document.getElementById('subOverlay')) closeSub(); }
+
+let subEditMode = false;
+
+function renderSubList() {
+  const grid = foodSubs.map((s,i)=>{
+    const emoji = FOOD_EMOJI[s]||'🛒';
+    if(subEditMode) {
+      return `<div style="position:relative;">
+        <button class="sub-btn" style="border-color:#ff6b6b;animation:shake .4s infinite;" onclick="removeSupplier(event,${i})">
+          🗑<br><span style="font-size:11px;">${s}</span>
+        </button>
+        <div style="position:absolute;top:4px;right:4px;width:8px;height:8px;background:#ff6b6b;border-radius:50%;"></div>
+      </div>`;
+    }
+    return `<button class="sub-btn" onclick="selectSub('${s.replace(/'/g,"\\'")}')">
+      ${emoji}<br>${s}
+    </button>`;
+  }).join('');
+
+  document.getElementById('subList').innerHTML = foodSubs.length
+    ? `<div class="sub-grid" id="subGrid">${grid}</div>
+       <div style="text-align:center;margin-top:10px;font-size:11px;color:var(--muted);">
+         ${subEditMode ? '⚠️ 點格子刪除 · 再長按退出' : '長按任一格進入刪除模式'}
+       </div>`
+    : `<div style="text-align:center;color:var(--muted);padding:16px;font-size:13px;">尚無供應商，請新增</div>`;
+
+  if(foodSubs.length) {
+    const el = document.getElementById('subGrid');
+    // Desktop right-click
+    el.addEventListener('contextmenu', e=>{ e.preventDefault(); toggleSubEditMode(); });
+    // Mobile long press
+    let pressTimer;
+    el.addEventListener('touchstart', ()=>{ pressTimer = setTimeout(toggleSubEditMode, 600); }, {passive:true});
+    el.addEventListener('touchend',   ()=>clearTimeout(pressTimer), {passive:true});
+    el.addEventListener('touchmove',  ()=>clearTimeout(pressTimer), {passive:true});
+  }
+}
+
+function toggleSubEditMode() {
+  subEditMode = !subEditMode;
+  renderSubList();
+}
+
+function selectSub(sub) {
+  selectedSubCat = sub;
+  selectedSubCat2 = null;
+  if(sub === 'Woolworths') {
+    openWool();
+    return;
+  }
+  closeSub();
+  renderCats();
+}
+
+function addSupplier() {
+  const input = document.getElementById('subInput');
+  const name = input.value.trim();
+  if(!name) return;
+  if(foodSubs.includes(name)) { input.value=''; return; }
+  foodSubs.push(name);
+  saveFoodSubs();
+  input.value='';
+  renderSubList();
+}
+
+function removeSupplier(e, idx) {
+  e.stopPropagation();
+  foodSubs.splice(idx,1);
+  saveFoodSubs();
+  renderSubList();
+}
+
+// ── Third-level modal (Woolworths) ──
+let woolEditMode = false;
+
+function openWool() {
+  woolEditMode = false;
+  renderWoolList();
+  document.getElementById('woolInput').value='';
+  document.getElementById('woolOverlay').classList.add('show');
+  setTimeout(()=>document.getElementById('woolInput').blur(),100);
+}
+function closeWool() { woolEditMode=false; document.getElementById('woolOverlay').classList.remove('show'); }
+
+function renderWoolList() {
+  const grid = woolSubs.map((s,i)=>{
+    const emoji = WOOL_EMOJI[s]||'🛒';
+    if(woolEditMode) {
+      return `<button class="sub-btn" style="border-color:#ff6b6b;animation:shake .4s infinite;" onclick="removeWool(event,${i})">
+        🗑<br><span style="font-size:11px;">${s}</span>
+      </button>`;
+    }
+    return `<button class="sub-btn" onclick="selectWool('${s.replace(/'/g,"\\'")}')">
+      ${emoji}<br>${s}
+    </button>`;
+  }).join('');
+
+  document.getElementById('woolList').innerHTML = woolSubs.length
+    ? `<div class="sub-grid" id="woolGrid">${grid}</div>
+       <div style="text-align:center;margin-top:10px;font-size:11px;color:var(--muted);">
+         ${woolEditMode ? '⚠️ 點格子刪除 · 再長按退出' : '長按任一格進入刪除模式'}
+       </div>`
+    : `<div style="text-align:center;color:var(--muted);padding:16px;font-size:13px;">尚無項目，請新增</div>`;
+
+  if(woolSubs.length) {
+    const el = document.getElementById('woolGrid');
+    el.addEventListener('contextmenu', e=>{ e.preventDefault(); toggleWoolEditMode(); });
+    let pressTimer;
+    el.addEventListener('touchstart', ()=>{ pressTimer = setTimeout(toggleWoolEditMode, 600); }, {passive:true});
+    el.addEventListener('touchend',   ()=>clearTimeout(pressTimer), {passive:true});
+    el.addEventListener('touchmove',  ()=>clearTimeout(pressTimer), {passive:true});
+  }
+}
+
+function toggleWoolEditMode() { woolEditMode = !woolEditMode; renderWoolList(); }
+
+function selectWool(item) {
+  selectedSubCat2 = item;
+  closeWool();
+  closeSub();
+  renderCats();
+}
+
+function addWool() {
+  const input = document.getElementById('woolInput');
+  const name = input.value.trim();
+  if(!name) return;
+  if(woolSubs.includes(name)) { input.value=''; return; }
+  woolSubs.push(name);
+  saveWoolSubs();
+  input.value='';
+  renderWoolList();
+}
+
+function removeWool(e, idx) {
+  e.stopPropagation();
+  woolSubs.splice(idx,1);
+  saveWoolSubs();
+  renderWoolList();
+}
+
+// ── Subcategory modal (帳單) ──
+let billEditMode = false;
+
+function openBill() {
+  billEditMode = false;
+  renderBillList();
+  document.getElementById('billInput').value='';
+  document.getElementById('billOverlay').classList.add('show');
+  setTimeout(()=>document.getElementById('billInput').blur(),100);
+}
+function closeBill() { billEditMode=false; document.getElementById('billOverlay').classList.remove('show'); }
+function closeBillOutside(e) { if(e.target===document.getElementById('billOverlay')) closeBill(); }
+
+function renderBillList() {
+  const grid = billSubs.map((s,i)=>{
+    const emoji = BILL_EMOJI[s]||'📄';
+    if(billEditMode) {
+      return `<button class="sub-btn" style="border-color:#ff6b6b;animation:shake .4s infinite;" onclick="removeBill(event,${i})">
+        🗑<br><span style="font-size:11px;">${s}</span>
+      </button>`;
+    }
+    return `<button class="sub-btn" onclick="selectBill('${s.replace(/'/g,"\\'")}')">
+      ${emoji}<br>${s}
+    </button>`;
+  }).join('');
+
+  document.getElementById('billList').innerHTML = billSubs.length
+    ? `<div class="sub-grid" id="billGrid">${grid}</div>
+       <div style="text-align:center;margin-top:10px;font-size:11px;color:var(--muted);">
+         ${billEditMode ? '⚠️ 點格子刪除 · 再長按退出' : '長按任一格進入刪除模式'}
+       </div>`
+    : `<div style="text-align:center;color:var(--muted);padding:16px;font-size:13px;">尚無項目，請新增</div>`;
+
+  if(billSubs.length) {
+    const el = document.getElementById('billGrid');
+    el.addEventListener('contextmenu', e=>{ e.preventDefault(); toggleBillEditMode(); });
+    let pressTimer;
+    el.addEventListener('touchstart', ()=>{ pressTimer = setTimeout(toggleBillEditMode, 600); }, {passive:true});
+    el.addEventListener('touchend',   ()=>clearTimeout(pressTimer), {passive:true});
+    el.addEventListener('touchmove',  ()=>clearTimeout(pressTimer), {passive:true});
+  }
+}
+
+function toggleBillEditMode() { billEditMode = !billEditMode; renderBillList(); }
+
+function selectBill(sub) {
+  selectedSubCat = sub;
+  closeBill();
+  renderCats();
+}
+
+function addBill() {
+  const input = document.getElementById('billInput');
+  const name = input.value.trim();
+  if(!name) return;
+  if(billSubs.includes(name)) { input.value=''; return; }
+  billSubs.push(name);
+  saveBillSubs();
+  input.value='';
+  renderBillList();
+}
+
+function removeBill(e, idx) {
+  e.stopPropagation();
+  billSubs.splice(idx,1);
+  saveBillSubs();
+  renderBillList();
+}
+// ── Subcategory modal (員工) ──
+function openStaff() {
+  renderStaffList();
+  document.getElementById('staffInput').value='';
+  document.getElementById('staffOverlay').classList.add('show');
+  setTimeout(()=>document.getElementById('staffInput').blur(),100);
+}
+function closeStaff() { staffEditMode = false; document.getElementById('staffOverlay').classList.remove('show'); }
+function closeStaffOutside(e) { if(e.target===document.getElementById('staffOverlay')) closeStaff(); }
+
+const STAFF_COLORS = [
+  '#ff6b6b','#ffd166','#4fffb0','#64a0ff','#ff9070',
+  '#b0b0ff','#ff85c8','#70e0ff','#a8ff78','#ffb347','#c77dff','#00f5d4',
+];
+function staffBg(color) {
+  // derive a dark tinted background from the accent color
+  const r=parseInt(color.slice(1,3),16), g=parseInt(color.slice(3,5),16), b=parseInt(color.slice(5,7),16);
+  return `rgba(${r},${g},${b},0.12)`;
+}
+function staffInitials(name) { return name.slice(0,2).toUpperCase(); }
+function getStaffColor(s) { return typeof s==='object' ? s.color : STAFF_COLORS[staffList.indexOf(s)%STAFF_COLORS.length]||'#4fffb0'; }
+function getStaffName(s) { return typeof s==='object' ? s.name : s; }
+
+let staffEditMode = false;
+
+function renderStaffList() {
+  const grid = staffList.map((s,i)=>{
+    const name=getStaffName(s), color=getStaffColor(s);
+    if(staffEditMode) {
+      return `<button class="sub-btn" style="border-color:#ff6b6b;animation:shake .4s infinite;display:flex;flex-direction:column;align-items:center;gap:4px;" onclick="removeStaff(event,${i})">
+        <div style="width:32px;height:32px;border-radius:50%;background:${color};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#000;">🗑</div>
+        <span style="font-size:11px;">${name}</span>
+      </button>`;
+    }
+    return `<button class="sub-btn" style="border-color:${color}55;background:${staffBg(color)};display:flex;flex-direction:column;align-items:center;gap:4px;" onclick="selectStaffMember('${name.replace(/'/g,"\\'")}')">
+      <div style="width:32px;height:32px;border-radius:50%;background:${color};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#000;">${staffInitials(name)}</div>
+      <span style="font-size:11px;color:${color};font-weight:600;">${name}</span>
+    </button>`;
+  }).join('');
+
+  document.getElementById('staffList').innerHTML = staffList.length
+    ? `<div class="sub-grid" id="staffGrid">${grid}</div>
+       <div style="text-align:center;margin-top:10px;font-size:11px;color:var(--muted);">
+         ${staffEditMode ? '⚠️ 點頭像刪除 · 再長按退出' : '長按進入刪除模式'}
+       </div>`
+    : `<div style="text-align:center;color:var(--muted);padding:16px;font-size:13px;">尚無員工，請新增</div>`;
+
+  if(staffList.length) {
+    const el = document.getElementById('staffGrid');
+    el.addEventListener('contextmenu', e=>{ e.preventDefault(); toggleStaffEditMode(); });
+    let pressTimer;
+    el.addEventListener('touchstart', ()=>{ pressTimer = setTimeout(toggleStaffEditMode, 600); }, {passive:true});
+    el.addEventListener('touchend',   ()=>clearTimeout(pressTimer), {passive:true});
+    el.addEventListener('touchmove',  ()=>clearTimeout(pressTimer), {passive:true});
+  }
+}
+
+function toggleStaffEditMode() {
+  staffEditMode = !staffEditMode;
+  renderStaffList();
+}
+
+function selectStaffMember(name) {
+  selectedSubCat = name;
+  closeStaff();
+  renderCats();
+}
+
+function addStaff() {
+  const input = document.getElementById('staffInput');
+  const name = input.value.trim();
+  const color = document.getElementById('staffColor').value;
+  if(!name) return;
+  if(staffList.some(s=>getStaffName(s)===name)) { input.value=''; return; }
+  staffList.push({name, color});
+  saveStaff();
+  input.value='';
+  renderStaffList();
+}
+
+function changeStaffColor(e, idx) {
+  const s = staffList[idx];
+  staffList[idx] = { name: getStaffName(s), color: e.target.value };
+  saveStaff();
+  renderStaffList();
+}
+
+function removeStaff(e, idx) {
+  e.stopPropagation();
+  staffList.splice(idx,1);
+  saveStaff();
+  renderStaffList();
+}
+
+function addEntry(expensePay) {
+  const amount=parseFloat(document.getElementById('fAmount').value);
+  const desc=document.getElementById('fDesc').value.trim();
+  const date=document.getElementById('fDate').value;
+  if(!amount||amount<=0){ alert('請輸入金額'); return; }
+  if(!date){ alert('請選擇日期'); return; }
+  const autoDesc = currentType==='expense'
+    ? (selectedSubCat2 ? `${selectedCat} · ${selectedSubCat} · ${selectedSubCat2}`
+      : selectedSubCat ? `${selectedCat} · ${selectedSubCat}` : selectedCat)
+    : '';
+  // pay: for income use button param; for expense use button param
+  const isCashPay = currentType==='expense' && expensePay==='cash';
+  data.push({
+    id:Date.now(), type:currentType, amount,
+    desc: desc || autoDesc,
+    cat: currentType==='expense' ? selectedCat : null,
+    subcat: currentType==='expense' ? selectedSubCat : null,
+    subcat2: currentType==='expense' ? selectedSubCat2 : null,
+    pay: expensePay || null,
+    cashPaid: (currentType==='expense' && (cashPaid || isCashPay)) ? true : undefined,
+    date
+  });
+  localStorage.setItem('weeklyAcct', JSON.stringify(data));
+  closeModal();
+  const dates=getWeekDates(currentWeekOffset);
+  if(dates.find(d=>fmt(d)===date)) selectedDay=date;
+  renderWeek();
+}
+
+function deleteEntry(id) {
+  data=data.filter(e=>e.id!==id);
+  localStorage.setItem('weeklyAcct', JSON.stringify(data));
+  renderWeek();
+}
+
+function confirmDelete(id) {
+  // Show inline confirm row
+  const btn = document.querySelector(`[data-delid="${id}"]`);
+  if(!btn) return;
+  const card = btn.closest('.entry-card');
+  if(card.querySelector('.del-confirm')) return; // already shown
+  const row = document.createElement('div');
+  row.className = 'del-confirm';
+  row.innerHTML = `<span style="font-size:12px;color:var(--muted);">確定刪除？</span>
+    <button onclick="deleteEntry(${id})" style="background:var(--expense);color:#fff;border:none;padding:4px 12px;border-radius:6px;font-size:12px;cursor:pointer;">刪除</button>
+    <button onclick="this.parentElement.remove()" style="background:var(--card);color:var(--muted);border:1px solid var(--border);padding:4px 10px;border-radius:6px;font-size:12px;cursor:pointer;">取消</button>`;
+  row.style.cssText='display:flex;align-items:center;gap:8px;margin-top:8px;';
+  card.appendChild(row);
+}
+
+renderCats();
+renderWeek();
+
+// ── Backup & Restore ──
+function openBackup() {
+  const last = localStorage.getItem('lastBackup');
+  document.getElementById('backupLastTime').textContent =
+    last ? `上次備份：${new Date(parseInt(last)).toLocaleString('zh-TW')}` : '上次備份：從未';
+  document.getElementById('restorePreview').style.display='none';
+  document.getElementById('backupOverlay').classList.add('show');
+}
+function closeBackup() { document.getElementById('backupOverlay').classList.remove('show'); }
+
+function doBackup() {
+  const payload = {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    data: {
+      weeklyAcct: JSON.parse(localStorage.getItem('weeklyAcct')||'[]'),
+      staffList:  JSON.parse(localStorage.getItem('staffList')||'[]'),
+      foodSubs:   JSON.parse(localStorage.getItem('foodSubs')||'null') || [],
+      woolSubs:   JSON.parse(localStorage.getItem('woolSubs')||'null') || [],
+      billSubs:   JSON.parse(localStorage.getItem('billSubs')||'null') || [],
+    }
+  };
+  const ts      = fmtDDMMYYYY(new Date());
+  const jsonStr = JSON.stringify(payload);
+  const fileName= `週帳備份_${ts}.json`;
+
+  // Try Web Share API with file first
+  if(navigator.canShare) {
+    const file = new File([jsonStr], fileName, {type:'application/json'});
+    if(navigator.canShare({files:[file]})) {
+      navigator.share({ title:`📒 週帳備份 ${ts}`, files:[file] })
+        .then(()=>{ saveBkTime(); })
+        .catch(err=>{
+          if(err.name!=='AbortError') downloadBackup(jsonStr, fileName);
+        });
+      return;
+    }
+  }
+  // Fallback: download file directly
+  downloadBackup(jsonStr, fileName);
+}
+
+function downloadBackup(jsonStr, fileName) {
+  const blob = new Blob([jsonStr], {type:'application/json'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  saveBkTime();
+  // Show success in modal
+  const preview = document.getElementById('restorePreview');
+  preview.style.display = 'block';
+  preview.innerHTML = `<div style="color:var(--accent);font-weight:600;margin-bottom:6px;">✅ 備份檔案已下載！</div>
+    <div style="color:var(--muted);font-size:12px;line-height:1.8;">
+      檔名：<span style="color:var(--text)">${fileName}</span><br>
+      請將此檔案上傳到 Google Drive 保存
+    </div>`;
+}
+
+function saveBkTime() {
+  localStorage.setItem('lastBackup', Date.now());
+  document.getElementById('backupLastTime').textContent =
+    `上次備份：${new Date().toLocaleString('zh-TW')}`;
+}
+
+function loadRestoreFile(e) {
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const payload = JSON.parse(ev.target.result);
+      if(!payload.version || !payload.data) throw new Error('格式錯誤');
+      const d = payload.data;
+      const entryCount  = (d.weeklyAcct||[]).length;
+      const staffCount  = (d.staffList||[]).length;
+      const exportedAt  = payload.exportedAt ? new Date(payload.exportedAt).toLocaleString('zh-TW') : '未知';
+
+      const preview = document.getElementById('restorePreview');
+      preview.style.display='block';
+      preview.innerHTML = `
+        <div style="color:var(--accent3);font-weight:600;margin-bottom:8px;">📋 備份資料預覽</div>
+        <div style="color:var(--muted);line-height:1.8;">
+          備份時間：<span style="color:var(--text)">${exportedAt}</span><br>
+          帳目記錄：<span style="color:var(--income)">${entryCount} 筆</span><br>
+          員工名單：<span style="color:var(--text)">${staffCount} 人</span><br>
+          食材供應商：<span style="color:var(--text)">${(d.foodSubs||[]).length} 個</span>
+        </div>
+        <button onclick="confirmRestore()" style="margin-top:12px;width:100%;padding:10px;border-radius:10px;border:none;background:#ff6b6b;color:#fff;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;">
+          ⚠️ 確認還原（現有資料將被覆蓋）
+        </button>`;
+
+      // Store parsed data temporarily
+      window._restorePayload = payload;
+    } catch(err) {
+      alert('檔案格式不正確，請選擇正確的備份檔案');
+    }
+    e.target.value=''; // reset input
+  };
+  reader.readAsText(file);
+}
+
+function confirmRestore() {
+  const d = window._restorePayload?.data;
+  if(!d) return;
+  if(d.weeklyAcct) localStorage.setItem('weeklyAcct',  JSON.stringify(d.weeklyAcct));
+  if(d.staffList)  localStorage.setItem('staffList',   JSON.stringify(d.staffList));
+  if(d.foodSubs)   localStorage.setItem('foodSubs',    JSON.stringify(d.foodSubs));
+  if(d.woolSubs)   localStorage.setItem('woolSubs',    JSON.stringify(d.woolSubs));
+  if(d.billSubs)   localStorage.setItem('billSubs',    JSON.stringify(d.billSubs));
+  // Reload all data into memory
+  data      = JSON.parse(localStorage.getItem('weeklyAcct')||'[]');
+  staffList = JSON.parse(localStorage.getItem('staffList')||'[]');
+  foodSubs  = JSON.parse(localStorage.getItem('foodSubs')||'null') || [...DEFAULT_FOOD_SUBS];
+  woolSubs  = JSON.parse(localStorage.getItem('woolSubs')||'null') || [...DEFAULT_WOOL_SUBS];
+  billSubs  = JSON.parse(localStorage.getItem('billSubs')||'null') || [...DEFAULT_BILL_SUBS];
+  closeBackup();
+  renderCats();
+  renderWeek();
+  alert('✅ 還原成功！');
+}
+
+// ── Backup reminder (7 days) ──
+(function() {
+  const last = parseInt(localStorage.getItem('lastBackup')||'0');
+  const daysSince = (Date.now() - last) / (1000*60*60*24);
+  if(daysSince > 7) {
+    setTimeout(()=>{
+      const banner = document.createElement('div');
+      banner.style.cssText='position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:#2d2610;border:1px solid #ffd166;color:#ffd166;padding:10px 16px;border-radius:12px;font-size:12px;z-index:999;display:flex;align-items:center;gap:10px;max-width:340px;width:90%;';
+      banner.innerHTML=`<span>⚠️ 已超過 7 天未備份</span><button onclick="this.parentElement.remove();openBackup()" style="background:#ffd166;color:#000;border:none;padding:4px 10px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">立即備份</button><button onclick="this.parentElement.remove()" style="background:none;border:none;color:#ffd166;font-size:16px;cursor:pointer;padding:0 4px;">✕</button>`;
+      document.body.appendChild(banner);
+      setTimeout(()=>banner.remove(), 8000);
+    }, 1500);
+  }
+})();
+function openExport() {
+  const dates = getWeekDates(currentWeekOffset);
+  const first=dates[0], last=dates[6];
+  const weekCount = data.filter(e=>dates.some(d=>fmt(d)===e.date)).length;
+  document.getElementById('expWeekRange').textContent =
+    `${fmtDDMMYYYY(first)} – ${fmtDDMMYYYY(last)}，共 ${weekCount} 筆`;
+  const oldest = data.length ? data.slice().sort((a,b)=>a.date.localeCompare(b.date))[0].date : null;
+  document.getElementById('expAllCount').textContent = data.length
+    ? `共 ${data.length} 筆，從 ${oldest} 起` : '目前無資料';
+  document.getElementById('expOverlay').classList.add('show');
+}
+function closeExport() { document.getElementById('expOverlay').classList.remove('show'); }
+function closeExportOutside(e) { if(e.target===document.getElementById('expOverlay')) closeExport(); }
+
+function exportCSV(scope) {
+  const dates = getWeekDates(currentWeekOffset);
+  const dsSet = new Set(dates.map(fmt));
+  const rows = (scope==='week' ? data.filter(e=>dsSet.has(e.date)) : data.slice())
+    .sort((a,b)=>a.date.localeCompare(b.date));
+
+  const DAY_TW = ['日','一','二','三','四','五','六'];
+  const EXP_PAY_LABEL_CSV = { cash:'現金', card:'刷卡', transfer:'轉帳', gift:'Gift Card' };
+  const lines = [['日期','星期','類型','收款方式','類別','說明','金額'].join(',')];
+  rows.forEach(e=>{
+    const d = new Date(e.date+'T12:00:00');
+    const payLabel = e.type==='income'
+      ? (PAY_LABEL[e.pay]||'')
+      : (EXP_PAY_LABEL_CSV[e.pay]||'');
+    lines.push([
+      e.date,
+      '週'+DAY_TW[d.getDay()],
+      e.type==='income'?'收入':'支出',
+      payLabel,
+      e.cat||'',
+      `"${(e.desc||'').replace(/"/g,'""')}"`,
+      e.type==='income'?e.amount:-e.amount
+    ].join(','));
+  });
+
+  if(rows.length) {
+    const incRows = rows.filter(r=>r.type==='income');
+    const expRows = rows.filter(r=>r.type==='expense' && !r.cashPaid);
+    const inc  = incRows.reduce((s,r)=>s+r.amount,0);
+    const exp  = expRows.reduce((s,r)=>s+r.amount,0);
+    const card = incRows.filter(r=>r.pay==='card').reduce((s,r)=>s+r.amount,0);
+    const cash = incRows.filter(r=>r.pay==='cash').reduce((s,r)=>s+r.amount,0);
+    const uber = incRows.filter(r=>r.pay==='uber').reduce((s,r)=>s+r.amount,0);
+    const door = incRows.filter(r=>r.pay==='door').reduce((s,r)=>s+r.amount,0);
+    const gst  = Math.round(card * 0.1) + 500;
+    const turnover = (card + uber + door) * 1.05;
+    const foodCost = rows.filter(r=>r.type==='expense' && r.cat==='食材').reduce((s,r)=>s+r.amount,0);
+    const foodRatio = turnover > 0 ? (foodCost / turnover * 100).toFixed(1) : 'N/A';
+    lines.push('','--- 小計 ---','');
+    lines.push(`總收入,,,,,,${Math.round(inc*100)/100}`);
+    lines.push(`  💳 刷卡,,,,,,${Math.round(card*100)/100}`);
+    lines.push(`  💵 現金,,,,,,${Math.round(cash*100)/100}`);
+    lines.push(`  🚗 Uber Eats,,,,,,${Math.round(uber*100)/100}`);
+    lines.push(`  🛵 DoorDash,,,,,,${Math.round(door*100)/100}`);
+    lines.push(`總支出,,,,,,${Math.round(exp*100)/100}`);
+    lines.push(`淨利,,,,,,${Math.round((inc-exp)*100)/100}`);
+    lines.push(`預計 GST,,,,,,${gst}`);
+    lines.push(`營業額 (刷卡+Uber+Door)×1.05,,,,,,${Math.round(turnover*100)/100}`);
+    lines.push(`食材成本,,,,,,${Math.round(foodCost*100)/100}`);
+    lines.push(`食材成本佔營業額,,,,,,${foodRatio}%`);
+  }
+
+  const blob = new Blob(['\uFEFF'+lines.join('\n')], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const first=dates[0], last=dates[6];
+  a.href = url;
+  a.download = scope==='week'
+    ? `週帳_${fmtDDMMYYYY(first)}-${fmtDDMMYYYY(last)}.csv`
+    : `週帳_全部_${fmtDDMMYYYY(new Date())}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  closeExport();
+}
+
+// ── Export Excel (all weeks, one sheet per week) ──
+function exportExcel() {
+  if(!data.length) { alert('目前無資料可匯出'); return; }
+
+  const wb = XLSX.utils.book_new();
+  const DAY_TW = ['日','一','二','三','四','五','六'];
+
+  // Group data by week (Mon–Sun)
+  function getWeekKey(dateStr) {
+    const d = new Date(dateStr + 'T12:00:00');
+    const mon = new Date(d);
+    mon.setDate(d.getDate() - ((d.getDay()+6)%7));
+    return fmt(mon);
+  }
+
+  // Build week map sorted chronologically
+  const weekMap = {};
+  data.forEach(e => {
+    const key = getWeekKey(e.date);
+    if(!weekMap[key]) weekMap[key] = [];
+    weekMap[key].push(e);
+  });
+
+  const weekKeys = Object.keys(weekMap).sort();
+
+  weekKeys.forEach(monStr => {
+    const mon = new Date(monStr + 'T12:00:00');
+    const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+    const sheetName = `${fmtShort(mon)}-${fmtShort(sun)}`;
+
+    const rows = weekMap[monStr].sort((a,b) => a.date.localeCompare(b.date));
+
+    // Header row
+    const wsData = [
+      ['日期', '星期', '類型', '收款方式', '類別', '說明', '金額 ($)']
+    ];
+
+    rows.forEach(e => {
+      const d = new Date(e.date + 'T12:00:00');
+      wsData.push([
+        fmtDDMMYYYY(d),
+        '週' + DAY_TW[d.getDay()],
+        e.type === 'income' ? '收入' : '支出',
+        e.type === 'income' ? (PAY_LABEL[e.pay] || '') : '',
+        e.cat || '',
+        e.desc || '',
+        e.type === 'income' ? e.amount : -e.amount
+      ]);
+    });
+
+    // Summary
+    const inc  = rows.filter(r=>r.type==='income').reduce((s,r)=>s+r.amount,0);
+    const exp  = rows.filter(r=>r.type==='expense').reduce((s,r)=>s+r.amount,0);
+    const card = rows.filter(r=>r.pay==='card').reduce((s,r)=>s+r.amount,0);
+    const cash = rows.filter(r=>r.pay==='cash').reduce((s,r)=>s+r.amount,0);
+    const uber = rows.filter(r=>r.pay==='uber').reduce((s,r)=>s+r.amount,0);
+    const door = rows.filter(r=>r.pay==='door').reduce((s,r)=>s+r.amount,0);
+    const gst  = Math.round(card * 0.1) + 500;
+
+    wsData.push([]);
+    wsData.push(['── 小計 ──']);
+    wsData.push(['本週收入', '', '', '', '', '', inc]);
+    wsData.push(['  💳 刷卡', '', '', '', '', '', card]);
+    wsData.push(['  💵 現金', '', '', '', '', '', cash]);
+    wsData.push(['  🚗 Uber Eats', '', '', '', '', '', uber]);
+    wsData.push(['  🛵 DoorDash', '', '', '', '', '', door]);
+    wsData.push(['本週支出', '', '', '', '', '', exp]);
+    wsData.push(['淨利', '', '', '', '', '', inc - exp]);
+    wsData.push(['預計 GST', '', '', '', '', '', gst]);
+
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+    // Column widths
+    ws['!cols'] = [
+      {wch:14},{wch:8},{wch:8},{wch:12},{wch:16},{wch:28},{wch:12}
+    ];
+
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  });
+
+  // Add summary sheet
+  const summaryData = [
+    ['週次', '本週收入', '本週支出', '淨利', '刷卡收入', '預計 GST']
+  ];
+  weekKeys.forEach(monStr => {
+    const mon = new Date(monStr + 'T12:00:00');
+    const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+    const rows = weekMap[monStr];
+    const inc  = rows.filter(r=>r.type==='income').reduce((s,r)=>s+r.amount,0);
+    const exp  = rows.filter(r=>r.type==='expense').reduce((s,r)=>s+r.amount,0);
+    const card = rows.filter(r=>r.pay==='card').reduce((s,r)=>s+r.amount,0);
+    const gst  = Math.round(card * 0.1) + 500;
+    summaryData.push([
+      `${fmtShort(mon)}-${fmtShort(sun)}`,
+      inc, exp, inc-exp, card, gst
+    ]);
+  });
+
+  const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
+  wsSummary['!cols'] = [{wch:18},{wch:14},{wch:14},{wch:14},{wch:14},{wch:14}];
+  XLSX.utils.book_append_sheet(wb, wsSummary, '總覽');
+
+  // Move 總覽 to first position
+  wb.SheetNames = ['總覽', ...wb.SheetNames.filter(s=>s!=='總覽')];
+
+  const ts = fmtDDMMYYYY(new Date());
+  XLSX.writeFile(wb, `週帳_全部_${ts}.xlsx`);
+  closeExport();
+}
+</script>
+</body>
+</html>
