@@ -542,6 +542,7 @@ function openModal() {
   cashPaid=false;
   document.getElementById('cashPaidGroup').style.display='none';
   setType('expense');
+  renderCats();
   document.getElementById('overlay').classList.add('show');
   setTimeout(()=>document.getElementById('fAmount').focus(),300);
 }
@@ -581,7 +582,7 @@ function setPayMethod(pay) {
 
 function renderCats() {
   const cats = EXPENSE_CATS;
-  if(!selectedCat) selectedCat=cats[0];
+  if(!selectedCat) { selectedCat=cats[0]; cashPaid=false; }
   document.getElementById('catBtns').innerHTML=cats.map(c=>{
     const isActive = selectedCat===c;
     let subLabel = '';
