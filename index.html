@@ -1168,7 +1168,7 @@ function exportCSV(scope) {
     const uber = incRows.filter(r=>r.pay==='uber').reduce((s,r)=>s+r.amount,0);
     const door = incRows.filter(r=>r.pay==='door').reduce((s,r)=>s+r.amount,0);
     const gst  = Math.round(card * 0.1) + 500;
-    const turnover = (card + uber + door) * 1.05;
+    const turnover = (card + uber + door) * 1.05 / 1.1;
     const foodCost = rows.filter(r=>r.type==='expense' && r.cat==='食材').reduce((s,r)=>s+r.amount,0);
     const foodRatio = turnover > 0 ? (foodCost / turnover * 100).toFixed(1) : 'N/A';
     lines.push('','--- 小計 ---','');
@@ -1180,7 +1180,7 @@ function exportCSV(scope) {
     lines.push(`總支出,,,,,,${Math.round(exp*100)/100}`);
     lines.push(`淨利,,,,,,${Math.round((inc-exp)*100)/100}`);
     lines.push(`預計 GST,,,,,,${gst}`);
-    lines.push(`營業額 (刷卡+Uber+Door)×1.05,,,,,,${Math.round(turnover*100)/100}`);
+    lines.push(`營業額 (刷卡+Uber+Door)×1.05÷1.1,,,,,,${Math.round(turnover*100)/100}`);
     lines.push(`食材成本,,,,,,${Math.round(foodCost*100)/100}`);
     lines.push(`食材成本佔營業額,,,,,,${foodRatio}%`);
   }
